@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import List
 import os.path
 
-import imageio.v2 as imageio
 import numpy as np
 from numpy import array
 from scipy.fft import fft2, ifft2, ifftshift
@@ -19,6 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation, cm
 
 from subplane import subplane
+
 
 def normalize_image(img):
     return (img - img.min()) / (img.max()-img.min())
@@ -161,6 +161,7 @@ if __name__ == "__main__":
     x = range(0, len(grids[0]), 1)
     X, Y = np.meshgrid(x, x)
     ax.set_zlim(-2000, 2000)
+    ax.view_init(elev=25, azim=45, roll=0)
 
     surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean)
         
