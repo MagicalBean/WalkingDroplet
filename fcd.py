@@ -18,8 +18,7 @@ from kspace import pixel2kspace
 import matplotlib.pyplot as plt
 from matplotlib import animation, cm
 
-import plotly.graph_objects as go
-
+from subplane import subplane
 
 def normalize_image(img):
     return (img - img.min()) / (img.max()-img.min())
@@ -78,6 +77,7 @@ if __name__ == "__main__":
     argparser.add_argument('reference_image', type=str)
     argparser.add_argument('definition_image', nargs='+', help='May contain wildcards')
     argparser.add_argument('-l', '--input_length', type=int, default=-1, help='number of files to process')
+    argparser.add_argument('-n', '--output_name', type=str, help='Name of output file')
     argparser.add_argument('--output-format', default='tiff', choices=['tiff', 'bmp', 'png', 'jpg', 'jpeg'], help='The output format')
     argparser.add_argument('--skip-existing', action='store_true', help='Skip processing an image if the output file already exists')
 
@@ -89,21 +89,19 @@ if __name__ == "__main__":
     
     y_0, x_0 = np.asarray(i_ref.shape) // 2
     
-    x_0 += 25
-    y_0 -= 30
-    im_size = 400 # half-extends
+    x_0 += 0
+    y_0 -= 0
+    im_size = 522//2 # half-extends
     
     i_ref = i_ref[y_0 - im_size : y_0 + im_size, x_0 - im_size : x_0 + im_size]
     
     # plt.imshow(i_ref, cmap='gray')
     # plt.show()
-    print(max(i_ref[0]), min(i_ref[0]))
+    # print(max(i_ref[0]), min(i_ref[0]))
 
     print(f'processing reference image...', end='')
     carriers = calculate_carriers(i_ref)
     print('done')
-
-    print(args.input_length)
     
     if args.input_length == -1:
         filenames = [args.definition_image[0] + x for x in os.listdir(args.definition_image[0]) if x.endswith(('.tif', '.tiff'))]
@@ -133,19 +131,37 @@ if __name__ == "__main__":
         # plt.show()
         t0 = time.time()
         height_field = fcd(i_def, carriers)
+        height_field_sub = subplane(height_field)
         print(f'done in {time.time() - t0:.2f}s\n')
 
         # imageio.imwrite(output_file_path, (normalize_image(height_field) * 255.0).astype(np.uint8))
-        
-        grids.append(height_field[5:-5, 5:-5])
 
+        # fig = plt.figure(figsize=plt.figaspect(0.5))
+        # ax = fig.add_subplot(1, 2, 1, projection='3d')
+
+        # x = range(0, len(height_field), 1)
+        # X, Y = np.meshgrid(x, x)
+        # surf = ax.plot_surface(X, Y, height_field, cmap=cm.ocean, antialiased=True)
+        # ax.set_zlim(-2000, 2000)
+
+        # ax = fig.add_subplot(1, 2, 2, projection='3d')
+        # surf = ax.plot_surface(X, Y, height_field_2, cmap=cm.ocean, antialiased=True)
+        # ax.set_zlim(-2000, 2000)
+
+        # plt.show()
+
+        grids.append(height_field_sub[5:-5, 5:-5])
+
+    print(f'height map processing done in {time.time() - start_time:.2f}s\n')
+    print("creating animation...", end='')
+    ani_time = time.time()
+    
     # 3d plot with matplotlib 
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
     x = range(0, len(grids[0]), 1)
     X, Y = np.meshgrid(x, x)
     ax.set_zlim(-2000, 2000)
 
-    print(np.shape(grids))
     surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean)
         
     def update(i):
@@ -155,6 +171,7 @@ if __name__ == "__main__":
         return surf
     
     ani = animation.FuncAnimation(fig, update, frames=len(grids), interval=1, blit=False)
-    ani.save('wave_test_3_3d.mp4', writer='ffmpeg', fps=10)
-    print(f'Runtime {time.time() - start_time:.2f}s\n')
+    ani.save(args.output_folder.joinpath(f'{args.output_name}.mp4'), writer='ffmpeg', fps=20)
+    print(f' done in {time.time() - ani_time:.2f}s\n')
+    print(f'Total runtime {time.time() - start_time:.2f}s\n')
     # plt.show()
