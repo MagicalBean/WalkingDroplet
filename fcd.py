@@ -13,12 +13,11 @@ from more_itertools import flatten
 from fft_inverse_gradient import fftinvgrad
 from find_peaks import find_peaks
 from kspace import pixel2kspace
+from subplane import subplane
 
 import matplotlib.pyplot as plt
 from matplotlib import animation, cm
-
-from subplane import subplane
-
+from matplotlib.widgets import RectangleSelector
 
 def normalize_image(img):
     return (img - img.min()) / (img.max()-img.min())
@@ -65,6 +64,26 @@ def fcd(i_def, carriers: List[Carrier]):
 
     return fftinvgrad(-u, -v)
 
+def select_region(img):
+    fig, ax = plt.subplots()
+    ax.imshow(img)
+    ax.set_title("Drag to select a rectangular region")
+
+    def on_press(event):
+        if event.key == 'enter':
+            plt.close()
+
+    rect_selector = RectangleSelector(ax, useblit=True,
+                                      button=[1], # left mouse button
+                                      minspanx=5, minspany=5, spancoords='pixels', interactive=True, state_modifier_keys=dict(square=''))
+    
+    rect_selector.add_state('square')
+    fig.canvas.mpl_connect('key_press_event', on_press)
+    plt.show()
+
+    # x1, x2, y1, y2 = rect_selector.extents
+    return tuple(map(round, rect_selector.extents))
+
 if __name__ == "__main__":
     import argparse
     import glob
@@ -86,31 +105,23 @@ if __name__ == "__main__":
     args.output_folder.mkdir(exist_ok=True)
 
     i_ref = imread(args.reference_image, as_gray=True)
-    
-    y_0, x_0 = np.asarray(i_ref.shape) // 2
-    
-    x_0 += 0
-    y_0 -= 0
-    im_size = 522//2 # half-extends
-    
-    i_ref = i_ref[y_0 - im_size : y_0 + im_size, x_0 - im_size : x_0 + im_size]
-    
-    # plt.imshow(i_ref, cmap='gray')
-    # plt.show()
-    # print(max(i_ref[0]), min(i_ref[0]))
 
+    if args.input_length == -1:
+        filenames = [args.definition_image[0] + x for x in os.listdir(args.definition_image[0]) if x.endswith(('.tif', '.tiff', '.png'))]
+    else:
+        filenames = [args.definition_image[0] + x for x in os.listdir(args.definition_image[0])[:args.input_length] if x.endswith(('.tif', '.tiff'))]
+    
+    files = list(sorted(flatten((glob.glob(x) if '*' in x else [x]) for x in filenames)))
+
+    example_img = imread(files[0], as_gray=True)
+    x1, x2, y1, y2 = select_region(example_img)
+    
+    i_ref = i_ref[y1:y2, x1:x2]
+    
     print(f'processing reference image...', end='')
     carriers = calculate_carriers(i_ref)
     print('done')
     
-    if args.input_length == -1:
-        filenames = [args.definition_image[0] + x for x in os.listdir(args.definition_image[0]) if x.endswith(('.tif', '.tiff'))]
-    else:
-        filenames = [args.definition_image[0] + x for x in os.listdir(args.definition_image[0])[:args.input_length] if x.endswith(('.tif', '.tiff'))]
-    
-
-    files = list(sorted(flatten((glob.glob(x) if '*' in x else [x]) for x in filenames)))
-
     grids = []
 
     for file in files:
@@ -126,29 +137,12 @@ if __name__ == "__main__":
         print(f'processing {file} -> {output_file_path} ... ', end='')
         i_def = imread(file, as_gray=True)
         
-        i_def = i_def[y_0 - im_size : y_0 + im_size, x_0 - im_size : x_0 + im_size]
-        # plt.imshow(i_def, cmap='grey')
-        # plt.show()
+        i_def = i_def[y1:y2, x1:x2]
+
         t0 = time.time()
         height_field = fcd(i_def, carriers)
         height_field_sub = subplane(height_field)
         print(f'done in {time.time() - t0:.2f}s\n')
-
-        # imageio.imwrite(output_file_path, (normalize_image(height_field) * 255.0).astype(np.uint8))
-
-        # fig = plt.figure(figsize=plt.figaspect(0.5))
-        # ax = fig.add_subplot(1, 2, 1, projection='3d')
-
-        # x = range(0, len(height_field), 1)
-        # X, Y = np.meshgrid(x, x)
-        # surf = ax.plot_surface(X, Y, height_field, cmap=cm.ocean, antialiased=True)
-        # ax.set_zlim(-2000, 2000)
-
-        # ax = fig.add_subplot(1, 2, 2, projection='3d')
-        # surf = ax.plot_surface(X, Y, height_field_2, cmap=cm.ocean, antialiased=True)
-        # ax.set_zlim(-2000, 2000)
-
-        # plt.show()
 
         grids.append(height_field_sub[5:-5, 5:-5])
 
@@ -163,16 +157,15 @@ if __name__ == "__main__":
     ax.set_zlim(-2000, 2000)
     ax.view_init(elev=25, azim=45, roll=0)
 
-    surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean)
+    surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean, rstride=10, cstride=10)
         
     def update(i):
         ax.clear()
-        surf = ax.plot_surface(X, Y, grids[i], cmap=cm.ocean) # update data
+        surf = ax.plot_surface(X, Y, grids[i], cmap=cm.ocean, rstride=10, cstride=10) # update data
         ax.set_zlim(-2000, 2000)
         return surf
     
     ani = animation.FuncAnimation(fig, update, frames=len(grids), interval=1, blit=False)
-    ani.save(args.output_folder.joinpath(f'{args.output_name}.mp4'), writer='ffmpeg', fps=20)
+    ani.save(args.output_folder.joinpath(f'{args.output_name}.mp4'), writer='ffmpeg', fps=30)
     print(f' done in {time.time() - ani_time:.2f}s\n')
     print(f'Total runtime {time.time() - start_time:.2f}s\n')
-    # plt.show()
