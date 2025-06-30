@@ -58,9 +58,15 @@ def fcd(i_def, carriers: List[Carrier]):
 
     phis = [-np.angle(ifft2(i_def_fft * c.mask) * c.ccsgn) for c in carriers]
 
+    # scale by 0.25 * depth (H * 1 - n_a / n_w)
+
     det_a = carriers[0].k_loc[1] * carriers[1].k_loc[0] - carriers[0].k_loc[0] * carriers[1].k_loc[1]
     u = (carriers[1].k_loc[0] * phis[0] - carriers[0].k_loc[0] * phis[1]) / det_a
     v = (carriers[0].k_loc[1] * phis[1] - carriers[1].k_loc[1] * phis[0]) / det_a
+
+    # scaling to account for fluid depth (recommended by Jack)
+    u /= hstar
+    v /= hstar
 
     return fftinvgrad(-u, -v)
 
@@ -83,6 +89,10 @@ def select_region(img):
 
     # x1, x2, y1, y2 = rect_selector.extents
     return tuple(map(round, rect_selector.extents))
+
+# constants
+scale= 17.8 / 3; # pix/mm, lengthscale
+hstar= 0.25 * 5; # 5 mm depth, 0.25 is for air/water
 
 if __name__ == "__main__":
     import argparse
@@ -141,9 +151,11 @@ if __name__ == "__main__":
 
         t0 = time.time()
         height_field = fcd(i_def, carriers)
-        height_field_sub = subplane(height_field)
-        print(f'done in {time.time() - t0:.2f}s\n')
+        height_field_sub = subplane(height_field) / (scale * scale) # divide by scale^2 (pixel to mm conversion?)
+        # band pass filter
 
+        print(f'done in {time.time() - t0:.2f}s\n')
+ 
         grids.append(height_field_sub[5:-5, 5:-5])
 
     print(f'height map processing done in {time.time() - start_time:.2f}s\n')
@@ -154,15 +166,17 @@ if __name__ == "__main__":
     fig, ax = plt.subplots(subplot_kw=dict(projection='3d'))
     x = range(0, len(grids[0]), 1)
     X, Y = np.meshgrid(x, x)
-    ax.set_zlim(-2000, 2000)
+    ax.set_zlim(-100, 100)
     ax.view_init(elev=25, azim=45, roll=0)
 
-    surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean, rstride=10, cstride=10)
+    quality = 10 # 10 is default, 1 is highest
+
+    surf = ax.plot_surface(X, Y, grids[0], cmap=cm.ocean, rstride=quality, cstride=quality)
         
     def update(i):
         ax.clear()
-        surf = ax.plot_surface(X, Y, grids[i], cmap=cm.ocean, rstride=10, cstride=10) # update data
-        ax.set_zlim(-2000, 2000)
+        surf = ax.plot_surface(X, Y, grids[i], cmap=cm.ocean, rstride=quality, cstride=quality) # update data
+        ax.set_zlim(-100, 100)
         return surf
     
     ani = animation.FuncAnimation(fig, update, frames=len(grids), interval=1, blit=False)
