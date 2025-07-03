@@ -1,7 +1,6 @@
 # SUBPLANE fit and subtract a 2d plane from a matrix representing elevation
 
 import numpy as np
-from numpy.linalg import solve
 
 def subplane(h):
     """Returns the normalized height map.
