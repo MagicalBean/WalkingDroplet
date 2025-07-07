@@ -1,5 +1,5 @@
 import numpy as np
-from pyfftw.interfaces.scipy_fftpack import fft2, ifft2, fftfreq
+from pyfftw.interfaces.scipy_fftpack import fft2, ifft2
 
 from kspace import kvec
 
