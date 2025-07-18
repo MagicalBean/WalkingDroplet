@@ -76,7 +76,7 @@ def fcd(i_def, carriers: List[Carrier]):
 def select_region(img):
     fig, ax = plt.subplots()
     ax.imshow(img, cmap='gray')
-    ax.set_title("Drag to select a rectangular region")
+    ax.set_title("Drag to select a region for analysis")
 
     # close window and submit if enter key is pressed
     def on_press(event):
@@ -128,7 +128,7 @@ if __name__ == "__main__":
     # Grab all image files in definition directory
     filenames = [f for ext in ('tif', 'tiff', 'png', 'jpg', 'jpeg') for f in glob.glob(os.path.join(args.definition_folder, f'*.{ext}'))]
     if args.input_length == -1: args.input_length = len(filenames)+1
-    filenames = filenames[:args.input_length]
+    filenames = filenames[:args.input_length] # use files up to input length (or max if none is provided)
     
     files = list(sorted(flatten((glob.glob(x) if '*' in x else [x]) for x in filenames)))
 
@@ -193,7 +193,8 @@ if __name__ == "__main__":
             return im
     
     ani = animation.FuncAnimation(fig, update, frames=len(height_maps), interval=1, blit=False)
-    ani.save(args.output_folder.joinpath(f'{args.output_name}.mp4'), writer='ffmpeg', fps=30)
+    ani_name = args.output_name if args.output_name is not None else Path(files[0]).stem
+    ani.save(args.output_folder.joinpath(f'{ani_name}.mp4'), writer='ffmpeg', fps=30)
     print(f' done in {time.time() - ani_time:.2f}s\n')
     print(f'Total runtime {time.time() - start_time:.2f}s\n')
     plt.show()

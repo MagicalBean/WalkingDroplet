@@ -1,0 +1,7 @@
+matplotlib
+more_itertools
+numpy
+opencv_python
+pyFFTW
+scipy
+skimage

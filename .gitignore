@@ -1,4 +1,5 @@
 output/
+input/
 __pycache__/
 
 # exclude any generated outputs or raw input files
