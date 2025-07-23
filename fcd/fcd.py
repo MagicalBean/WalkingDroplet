@@ -96,7 +96,7 @@ def select_region(img):
     return tuple(map(round, rect_selector.extents))
 
 # constants
-scale = 1 / 0.105; # pix/mm, lengthscale
+scale = 1 / 0.055; # pix/mm, lengthscale
 # hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
 fluid_depth = 5 # mm
 acrylic_thickness = 6.35 # mm
@@ -116,6 +116,7 @@ if __name__ == "__main__":
     argparser.add_argument('definition_folder', type=Path)
     argparser.add_argument('-n', '--output_name', type=str, help='Name of output file')
     argparser.add_argument('-l', '--input_length', type=int, default=-1, help='number of files to process')
+    argparser.add_argument('-1d', '--one_d', action='store_true')
     argparser.add_argument('-3d', '--three_d', action='store_true')
 
     args = argparser.parse_args()
@@ -147,6 +148,7 @@ if __name__ == "__main__":
     height_maps = []
     for file in files:
         # Read deformed image
+        print(f'processing {file} ... ', end='')
         i_def = imread(file, as_gray=True)
         
         # Crop deformed image
@@ -160,12 +162,45 @@ if __name__ == "__main__":
 
         print(f'done in {time.time() - t0:.2f}s\n')
  
-        height_maps.append(height_field_filtered[5:-5, 5:-5])
+        height_maps.append(height_field_filtered[20:-20, 20:-20])
 
     print(f'height map processing done in {time.time() - start_time:.2f}s\n')
     print("creating animation...", end='')
     ani_time = time.time()
 
+    from matplotlib.ticker import FuncFormatter
+
+    n = 5 # frame rate frequency / drive frequency
+    map_bins = [np.mean(height_maps[i::n], axis=0) for i in range(n)]
+    # data = np.mean(height_maps, axis=0)[center_y, :]
+
+    height_maps = np.stack(map_bins) 
+
+    if args.one_d:
+        fig = plt.figure(figsize=(6, 4))
+        fig.set_dpi(100)
+        r, c = height_maps[0].shape
+        center_y, center_x = np.unravel_index(np.argmax(np.abs(height_maps[0])), height_maps[0].shape)
+        data = height_maps[0][center_y, :]
+        plt.ylim(min(data), max(data))
+        line, = plt.plot(data)
+        plt.xlabel("Distance (mm)")
+        plt.ylabel("Amplitude")
+
+        def pixel_to_mm_formatter(x, pos):
+            mm_value = x / scale
+            return f"{mm_value:.1f} mm" # Format to two decimal places
+
+        formatter = FuncFormatter(pixel_to_mm_formatter)
+        plt.gca().xaxis.set_major_formatter(formatter)
+
+        def update(i):
+            line.set_ydata(height_maps[i][center_y, :])
+            return line
+
+        # plt.show()
+
+        
     if args.three_d: # 3d plot with matplotlib 
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         r, c = height_maps[0].shape
@@ -182,7 +217,7 @@ if __name__ == "__main__":
             surf = ax.plot_surface(X, Y, height_maps[i], cmap=cm.ocean, rstride=quality, cstride=quality) # update data
             ax.set_zlim(-10, 10)
             return surf
-    else: # 2d plot
+    if not args.one_d and not args.three_d: # 2d plot
         fig = plt.figure(figsize=(6, 4))
         fig.set_dpi(100)
         im = plt.imshow(height_maps[0], cmap='ocean')
@@ -194,7 +229,7 @@ if __name__ == "__main__":
     
     ani = animation.FuncAnimation(fig, update, frames=len(height_maps), interval=1, blit=False)
     ani_name = args.output_name if args.output_name is not None else Path(files[0]).stem
-    ani.save(args.output_folder.joinpath(f'{ani_name}.mp4'), writer='ffmpeg', fps=30)
+    ani.save(args.output_folder.joinpath(f'{ani_name}.mp4'), writer='ffmpeg', fps=10)
     print(f' done in {time.time() - ani_time:.2f}s\n')
     print(f'Total runtime {time.time() - start_time:.2f}s\n')
     plt.show()

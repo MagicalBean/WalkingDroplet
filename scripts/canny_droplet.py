@@ -92,7 +92,7 @@ def main(argv):
         # filter out contours that are too big, small, or touch the border
         height, width = gray.shape
         image_area = height * width
-        min_area = 0.00001 * image_area
+        min_area = 0.005 * image_area
         max_area = 0.2 * image_area
 
         def touches_border(cnt, margin=2):
@@ -187,7 +187,7 @@ def main(argv):
     print()
 
 # mm to pixel scaling value
-scale = 6 / 877.72 # mm/pix
+scale = 6 / 895.09 # mm/pix
 
 if __name__ == "__main__":
     main([sys.argv[1]])
