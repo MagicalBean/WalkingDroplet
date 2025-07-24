@@ -15,7 +15,7 @@ We are using this code alongside the droplet generator from the Harris Lab at Br
 ### Command line syntax:
 
 ```bash
-python  fcd.py  <output_dir> <reference_image_path> <definition_images_dir [options]
+python  fcd.py  <output_dir> <reference_image_path> <definition_images_dir> [options]
 ```
 
 ### Required Arguments
@@ -28,6 +28,7 @@ python  fcd.py  <output_dir> <reference_image_path> <definition_images_dir [opti
 
 - `-n <output_name>` – name for the output file
 - `-l <#>` – Limit the number of frames to process
+- `-1d` – Enable wave profile rendering
 - `-3d` – Enable 3D surface wave reconstruction rendering
 
 ## Installation
