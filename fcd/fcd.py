@@ -1,58 +1,25 @@
 import time
-from dataclasses import dataclass
 from typing import List
 import os.path
+from pathlib import Path
 
 import numpy as np
-from numpy import array
 from pyfftw.interfaces.scipy_fftpack import fft2, ifft2
 from skimage.io import imread
 from more_itertools import flatten
+from joblib import Memory
 
 from fft_inverse_gradient import fftinvgrad
-from find_peaks import find_peaks
-from kspace import kvec
 from subplane import subplane
 from  bandpass_filter import filt_band_pass
+from select_roi import select_region
+from calculate_carriers import Carrier, calculate_carriers
+from renderer import render
 
-import matplotlib.pyplot as plt
-from matplotlib import animation, cm
-from matplotlib.widgets import RectangleSelector
+# cache for storing fcd results
+cache = Memory(location=Path("cache"), verbose=0)  # no console spam
 
-# complex conjugate of the inverse fft of the masked i_ref_fft
-def ccsgn(i_ref_fft, mask):
-    return np.conj(ifft2(i_ref_fft * mask))
-
-@dataclass
-class Carrier:
-    k_loc: array
-    krad: float
-    mask: array
-    ccsgn: array
-
-def calculate_carriers(i_ref):
-    kr, ku = find_peaks(i_ref)
-    
-    peak_radius = np.sqrt(np.sum((kr - ku)**2)) / 2
-    i_ref_fft = fft2(i_ref)
-
-    def create_mask(shape, kc, krad):
-        r, c = shape
-        kx, ky = np.meshgrid(kvec(c), kvec(r))
-        # Build the circular mask in k-space centered on kc = [kx, ky]
-        return ((kx - kc[0])**2 + (ky - kc[1])**2) < krad**2
-
-    carriers = []
-    for k_loc in [kr, ku]:
-        mask = create_mask(i_ref.shape, k_loc, peak_radius)
-        carrier = Carrier(k_loc=np.array(k_loc),
-                          krad=peak_radius,
-                          mask=mask,
-                          ccsgn=ccsgn(i_ref_fft, mask))
-        carriers.append(carrier) 
-    
-    return carriers
-
+@cache.cache
 def fcd(i_def, carriers: List[Carrier]):
     i_def_fft = fft2(i_def)
 
@@ -72,40 +39,18 @@ def fcd(i_def, carriers: List[Carrier]):
 
     return fftinvgrad(-u, -v)
 
-# previews deformed image and allows user to select a square region of it for analysis (if left blank it selects the whole image)
-def select_region(img):
-    fig, ax = plt.subplots()
-    ax.imshow(img, cmap='gray')
-    ax.set_title("Drag to select a region for analysis")
-
-    # close window and submit if enter key is pressed
-    def on_press(event):
-        if event.key == 'enter':
-            plt.close()
-
-    rect_selector = RectangleSelector(ax, useblit=True,
-                                      button=[1], # left mouse button
-                                      minspanx=5, minspany=5, spancoords='pixels', interactive=True, state_modifier_keys=dict(square=''))
-    
-    # require region to be square
-    rect_selector.add_state('square')
-    fig.canvas.mpl_connect('key_press_event', on_press)
-    plt.show()
-
-    # x1, x2, y1, y2 = rect_selector.extents
-    return tuple(map(round, rect_selector.extents))
-
 # constants
 scale = 1 / 0.055; # pix/mm, lengthscale
+drop_diameter = 0.78
+
+fluid_depth = 5 # mm (h_l)
+acrylic_thickness = 6.35 # mm (h_c)
 # hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
-fluid_depth = 5 # mm
-acrylic_thickness = 6.35 # mm
 hstar = (1 - (1 / 1.4009)) * (fluid_depth + (1.4009 / 1.4906) * acrylic_thickness); # 5 mm depth, 0.25 is for air/water
 
 if __name__ == "__main__":
     import argparse
     import glob
-    from pathlib import Path
 
     start_time = time.time()
 
@@ -135,7 +80,7 @@ if __name__ == "__main__":
 
     # User crop region
     example_img = imread(files[0], as_gray=True)
-    x1, x2, y1, y2 = select_region(example_img)
+    x1, x2, y1, y2 = select_region(example_img, args.definition_folder)
 
     # Crop the reference image
     if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
@@ -165,71 +110,22 @@ if __name__ == "__main__":
         height_maps.append(height_field_filtered[20:-20, 20:-20])
 
     print(f'height map processing done in {time.time() - start_time:.2f}s\n')
-    print("creating animation...", end='')
-    ani_time = time.time()
 
-    from matplotlib.ticker import FuncFormatter
-
-    n = 5 # frame rate frequency / drive frequency
+    n = 8 # frame rate frequency / drive frequency
     map_bins = [np.mean(height_maps[i::n], axis=0) for i in range(n)]
     # data = np.mean(height_maps, axis=0)[center_y, :]
 
     height_maps = np.stack(map_bins) 
 
-    if args.one_d:
-        fig = plt.figure(figsize=(6, 4))
-        fig.set_dpi(100)
-        r, c = height_maps[0].shape
-        center_y, center_x = np.unravel_index(np.argmax(np.abs(height_maps[0])), height_maps[0].shape)
-        data = height_maps[0][center_y, :]
-        plt.ylim(min(data), max(data))
-        line, = plt.plot(data)
-        plt.xlabel("Distance (mm)")
-        plt.ylabel("Amplitude")
+    print("creating animation...", end='')
+    ani_time = time.time()
 
-        def pixel_to_mm_formatter(x, pos):
-            mm_value = x / scale
-            return f"{mm_value:.1f} mm" # Format to two decimal places
-
-        formatter = FuncFormatter(pixel_to_mm_formatter)
-        plt.gca().xaxis.set_major_formatter(formatter)
-
-        def update(i):
-            line.set_ydata(height_maps[i][center_y, :])
-            return line
-
-        # plt.show()
-
-        
-    if args.three_d: # 3d plot with matplotlib 
-        fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
-        r, c = height_maps[0].shape
-        X, Y = np.meshgrid(np.arange(c), np.arange(r))
-        ax.set_zlim(-10, 10)
-        ax.view_init(elev=25, azim=45, roll=0)
-
-        quality = 10 # 10 is default, 1 is highest
-
-        surf = ax.plot_surface(X, Y, height_maps[0], cmap=cm.ocean, rstride=quality, cstride=quality)
-            
-        def update(i):
-            ax.clear()
-            surf = ax.plot_surface(X, Y, height_maps[i], cmap=cm.ocean, rstride=quality, cstride=quality) # update data
-            ax.set_zlim(-10, 10)
-            return surf
-    if not args.one_d and not args.three_d: # 2d plot
-        fig = plt.figure(figsize=(6, 4))
-        fig.set_dpi(100)
-        im = plt.imshow(height_maps[0], cmap='ocean')
-        plt.colorbar()
-
-        def update(i):
-            im.set_array(height_maps[i])
-            return im
-    
-    ani = animation.FuncAnimation(fig, update, frames=len(height_maps), interval=1, blit=False)
     ani_name = args.output_name if args.output_name is not None else Path(files[0]).stem
-    ani.save(args.output_folder.joinpath(f'{ani_name}.mp4'), writer='ffmpeg', fps=10)
+    output_path = args.output_folder.joinpath(f'{ani_name}.mp4')
+
+    # render the 2d color plot by default
+    dim = 1 if args.one_d else 3 if args.three_d else 2
+    render(height_maps, drop_diameter, scale, output_path, dim)
+
     print(f' done in {time.time() - ani_time:.2f}s\n')
     print(f'Total runtime {time.time() - start_time:.2f}s\n')
-    plt.show()
