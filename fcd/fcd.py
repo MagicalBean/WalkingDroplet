@@ -13,7 +13,6 @@ from vidstab import VidStab
 from fft_inverse_gradient import fftinvgrad
 from subplane import subplane
 from  bandpass_filter import filt_band_pass
-from select_roi import select_region
 from calculate_carriers import Carrier, calculate_carriers
 from renderer import render
 
@@ -22,6 +21,90 @@ cache = Memory(location=Path("cache"), verbose=0)  # no console spam
 
 # initialize video stabilizer
 stabilizer = VidStab()
+
+# constants
+scale = 1 / 0.055; # pix/mm, lengthscale
+drop_diameter = 0.78
+
+fluid_depth = 5 # mm (h_l)
+acrylic_thickness = 6.35 # mm (h_c)
+# hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
+hstar = (1 - (1 / 1.4009)) * (fluid_depth + (1.4009 / 1.4906) * acrylic_thickness); # 5 mm depth, 0.25 is for air/water
+
+def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_length=-1, debug=False):
+    """
+    Wrapper for the fcd function that handles the image preperation.
+
+    Args:
+        ref_img_path (str): Path to the reference image.
+        def_folder_path (int): Path to the folder containing the definition images.
+        crop_region (tuple): Crop region coords in (x1, x2, y1, y2) format
+        render_mode (int): Render mode 1, 2, or 3
+        input_length (int): The number of definition images to use (default is all files)
+        debug (bool): Whether or not to print to the console (default False)
+
+    Returns:
+        animation: The rendered matplotlib animation.
+    """
+    import glob
+
+    # Read reference image
+    i_ref = imread(ref_img_path, as_gray=True)
+
+    # Grab all images in definition directory
+    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff") 
+    filenames = [f for ext in image_extensions for f in glob.glob(os.path.join(def_folder_path, f'*{ext}'))]
+    if input_length == -1: input_length = len(filenames)+1
+    filenames = filenames[:input_length] # use files up to input length (or max if none is provided)
+    
+    files = list(sorted(flatten((glob.glob(x) if '*' in x else [x]) for x in filenames)))
+
+    # crop reference image to crop region
+    x1, x2, y1, y2 = crop_region
+    if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
+        i_ref = i_ref[y1:y2, x1:x2]
+
+    if debug: print(f'processing reference image...', end='')
+    carriers = calculate_carriers(i_ref)
+    if debug: print('done')
+
+    height_maps = []
+    for file in files:
+        # Read deformed image
+        if debug: print(f'processing {file} ... ', end='')
+        i_def = imread(file, as_gray=True)
+
+        i_def_stab = stabilizer.stabilize_frame(input_frame=i_def,
+                                                   smoothing_window=30) # stabilizer will output black frames until smoothing window is completed
+                
+        if np.sum(i_def_stab) == 0: continue # skip black frames
+                
+        # Crop deformed image
+        if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
+            i_def_stab = i_def_stab[y1:y2, x1:x2]
+
+        t0 = time.time()
+        height_field = fcd(i_def_stab, carriers) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
+        # height_field_sub = subplane(height_field) # removed to match surferbot example
+        height_field_filtered = filt_band_pass(height_field, [25, 200], 0)
+
+        if debug: print(f'done in {time.time() - t0:.2f}s\n')
+ 
+        height_maps.append(height_field_filtered[20:-20, 20:-20])
+
+    if debug: print(f'height map processing done\n')
+
+    n = 8 # frame rate frequency / drive frequency
+    map_bins = [np.mean(height_maps[i::n], axis=0) for i in range(n)]
+    # data = np.mean(height_maps, axis=0)[center_y, :]
+
+    height_maps = np.stack(map_bins) 
+
+    if debug: print("creating animation...")
+
+    # render the 2d color plot by default
+    return render(height_maps, drop_diameter, scale, render_mode)
+
 
 @cache.cache
 def fcd(i_def, carriers: List[Carrier]):
@@ -42,99 +125,3 @@ def fcd(i_def, carriers: List[Carrier]):
     v /= hstar
 
     return fftinvgrad(-u, -v)
-
-# constants
-scale = 1 / 0.055; # pix/mm, lengthscale
-drop_diameter = 0.78
-
-fluid_depth = 5 # mm (h_l)
-acrylic_thickness = 6.35 # mm (h_c)
-# hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
-hstar = (1 - (1 / 1.4009)) * (fluid_depth + (1.4009 / 1.4906) * acrylic_thickness); # 5 mm depth, 0.25 is for air/water
-
-if __name__ == "__main__":
-    import argparse
-    import glob
-
-    start_time = time.time()
-
-    # command line arguments
-    argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-    argparser.add_argument('output_folder', type=Path)
-    argparser.add_argument('reference_image', type=str)
-    argparser.add_argument('definition_folder', type=Path)
-    argparser.add_argument('-n', '--output_name', type=str, help='Name of output file')
-    argparser.add_argument('-l', '--input_length', type=int, default=-1, help='number of files to process')
-    argparser.add_argument('-1d', '--one_d', action='store_true')
-    argparser.add_argument('-3d', '--three_d', action='store_true')
-
-    args = argparser.parse_args()
-
-    args.output_folder.mkdir(exist_ok=True)
-
-    # Read reference image
-    i_ref = imread(args.reference_image, as_gray=True)
-
-    # Grab all image files in definition directory
-    filenames = [f for ext in ('tif', 'tiff', 'png', 'jpg', 'jpeg') for f in glob.glob(os.path.join(args.definition_folder, f'*.{ext}'))]
-    if args.input_length == -1: args.input_length = len(filenames)+1
-    filenames = filenames[:args.input_length] # use files up to input length (or max if none is provided)
-    
-    files = list(sorted(flatten((glob.glob(x) if '*' in x else [x]) for x in filenames)))
-
-    # User crop region
-    example_img = imread(files[0], as_gray=True)
-    x1, x2, y1, y2 = select_region(example_img, args.definition_folder)
-
-    # Crop the reference image
-    if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
-        i_ref = i_ref[y1:y2, x1:x2]
-        
-    print(f'processing reference image...', end='')
-    carriers = calculate_carriers(i_ref)
-    print('done')
-    
-    height_maps = []
-    for file in files:
-        # Read deformed image
-        print(f'processing {file} ... ', end='')
-        i_def = imread(file, as_gray=True)
-
-        i_def_stab = stabilizer.stabilize_frame(input_frame=i_def,
-                                                   smoothing_window=30)
-                
-        if np.sum(i_def_stab) == 0: continue
-                
-        # Crop deformed image
-        if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
-            i_def_stab = i_def_stab[y1:y2, x1:x2]
-
-        t0 = time.time()
-        height_field = fcd(i_def_stab, carriers) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
-        # height_field_sub = subplane(height_field) # removed to match surferbot example
-        height_field_filtered = filt_band_pass(height_field, [25, 200], 0)
-
-        print(f'done in {time.time() - t0:.2f}s\n')
- 
-        height_maps.append(height_field_filtered[20:-20, 20:-20])
-
-    print(f'height map processing done in {time.time() - start_time:.2f}s\n')
-
-    n = 8 # frame rate frequency / drive frequency
-    map_bins = [np.mean(height_maps[i::n], axis=0) for i in range(n)]
-    # data = np.mean(height_maps, axis=0)[center_y, :]
-
-    height_maps = np.stack(map_bins) 
-
-    print("creating animation...", end='')
-    ani_time = time.time()
-
-    ani_name = args.output_name if args.output_name is not None else Path(files[0]).stem
-    output_path = args.output_folder.joinpath(f'{ani_name}.mp4')
-
-    # render the 2d color plot by default
-    dim = 1 if args.one_d else 3 if args.three_d else 2
-    render(height_maps, drop_diameter, scale, output_path, dim)
-
-    print(f' done in {time.time() - ani_time:.2f}s\n')
-    print(f'Total runtime {time.time() - start_time:.2f}s\n')

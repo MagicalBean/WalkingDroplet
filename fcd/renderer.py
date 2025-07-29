@@ -30,10 +30,10 @@ def droplet_center(height, sigma=2.0, grad_thresh=0.2):
     return cy, cx
 
 # render height_map in one, two, or three dimensions
-def render(height_maps, drop_diameter, scale, output_path, dim, fps=10):
+def render(height_maps, drop_diameter, scale, render_mode):
     center_y, center_x = droplet_center(height_maps[0])
 
-    if dim == 1:
+    if render_mode == 1:
         fig = plt.figure(figsize=(6, 4))
         fig.set_dpi(100)
         ax = plt.gca()
@@ -60,7 +60,7 @@ def render(height_maps, drop_diameter, scale, output_path, dim, fps=10):
             line.set_ydata(height_maps[i][int(center_y), :])
             return line
         
-    if dim == 2: # 2d plot
+    if render_mode == 2: # 2d plot
         fig = plt.figure(figsize=(6, 4))
         fig.set_dpi(100)
         im = plt.imshow(height_maps[0], cmap='ocean')
@@ -75,7 +75,7 @@ def render(height_maps, drop_diameter, scale, output_path, dim, fps=10):
             return im
 
 
-    if dim == 3: # 3d plot with matplotlib 
+    if render_mode == 3: # 3d plot with matplotlib 
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         r, c = height_maps[0].shape
         X, Y = np.meshgrid(np.arange(c), np.arange(r))
@@ -93,5 +93,4 @@ def render(height_maps, drop_diameter, scale, output_path, dim, fps=10):
             return surf
             
     ani = animation.FuncAnimation(fig, update, frames=len(height_maps), interval=1, blit=False)
-    ani.save(output_path, writer='ffmpeg', fps=fps)
-    plt.show()
+    return ani

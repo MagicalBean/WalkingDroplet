@@ -2,6 +2,8 @@ import json
 import hashlib
 from pathlib import Path
 
+from skimage.io import imread
+
 import matplotlib.pyplot as plt
 from matplotlib.widgets import RectangleSelector
 from matplotlib.patches import Rectangle
@@ -37,9 +39,12 @@ def show_saved_roi(image, roi_path):
     return answer
 
 # previews deformed image and allows user to select a square region of it for analysis (if left blank it selects the whole image)
-def select_region(img, i_def_path):
+def select_region(img_path, i_def_path):
     roi_path = roi_filename_for(i_def_path)
     use_existing = roi_path.exists()
+
+    img = imread(img_path, as_gray=True)
+
 
     if use_existing:
         use_existing = show_saved_roi(img, roi_path)
