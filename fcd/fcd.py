@@ -8,6 +8,7 @@ from pyfftw.interfaces.scipy_fftpack import fft2, ifft2
 from skimage.io import imread
 from more_itertools import flatten
 from joblib import Memory
+from vidstab import VidStab
 
 from fft_inverse_gradient import fftinvgrad
 from subplane import subplane
@@ -18,6 +19,9 @@ from renderer import render
 
 # cache for storing fcd results
 cache = Memory(location=Path("cache"), verbose=0)  # no console spam
+
+# initialize video stabilizer
+stabilizer = VidStab()
 
 @cache.cache
 def fcd(i_def, carriers: List[Carrier]):
@@ -95,13 +99,18 @@ if __name__ == "__main__":
         # Read deformed image
         print(f'processing {file} ... ', end='')
         i_def = imread(file, as_gray=True)
-        
+
+        i_def_stab = stabilizer.stabilize_frame(input_frame=i_def,
+                                                   smoothing_window=30)
+                
+        if np.sum(i_def_stab) == 0: continue
+                
         # Crop deformed image
         if x1 != 0 and x2 != 0 and y1 != 0 and y2 != 0:
-            i_def = i_def[y1:y2, x1:x2]
+            i_def_stab = i_def_stab[y1:y2, x1:x2]
 
         t0 = time.time()
-        height_field = fcd(i_def, carriers) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
+        height_field = fcd(i_def_stab, carriers) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
         # height_field_sub = subplane(height_field) # removed to match surferbot example
         height_field_filtered = filt_band_pass(height_field, [25, 200], 0)
 

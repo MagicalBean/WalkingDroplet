@@ -5,6 +5,7 @@ cache/
 
 # exclude any generated outputs or raw input files
 *.mp4
+*.avi
 *.tif
 *.tiff
 *.png
