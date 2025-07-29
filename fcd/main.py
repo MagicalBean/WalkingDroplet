@@ -26,12 +26,8 @@ if __name__ == "__main__":
 
     args.output_folder.mkdir(exist_ok=True)
 
-    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
-
-    img_path = next((os.path.join(args.definition_folder, f) for f in os.listdir(args.definition_folder) if f.lower().endswith(image_extensions)), None)
-
     # user crop region
-    crop_region = select_region(img_path, args.definition_folder)
+    crop_region = select_region(args.definition_folder)
 
     # render mode
     render_mode = 1 if args.one_d else 3 if args.three_d else 2

@@ -1,6 +1,7 @@
 import json
 import hashlib
 from pathlib import Path
+import os
 
 from skimage.io import imread
 
@@ -39,14 +40,20 @@ def show_saved_roi(image, roi_path):
     return answer
 
 # previews deformed image and allows user to select a square region of it for analysis (if left blank it selects the whole image)
-def select_region(img_path, i_def_path):
-    roi_path = roi_filename_for(i_def_path)
-    use_existing = roi_path.exists()
 
+# if user_override is False and preview is True, this works as normal
+# if user_override is True and preview is False, this will for a manual region selection
+
+def select_region(i_def_path, user_override=False, preview=True):
+    roi_path = roi_filename_for(Path(i_def_path))
+    use_existing = roi_path.exists() and not user_override
+
+    # select preview image
+    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
+    img_path = next((os.path.join(i_def_path, f) for f in os.listdir(i_def_path) if f.lower().endswith(image_extensions)), None)
     img = imread(img_path, as_gray=True)
 
-
-    if use_existing:
+    if use_existing and preview:
         use_existing = show_saved_roi(img, roi_path)
 
     if use_existing:
@@ -55,7 +62,6 @@ def select_region(img_path, i_def_path):
     else:
         fig, ax = plt.subplots()
         ax.imshow(img, cmap='gray')
-        ax.set_title("Drag to select a region for analysis")
 
         # close window and submit if enter key is pressed
         def on_press(event):
@@ -63,12 +69,13 @@ def select_region(img_path, i_def_path):
                 plt.close()
 
         rect_selector = RectangleSelector(ax, useblit=True,
-                                        button=[1], # left mouse button
+                                        button=[1], # left mouse button,
                                         minspanx=5, minspany=5, spancoords='pixels', interactive=True, state_modifier_keys=dict(square=''))
         
         # require region to be square
         rect_selector.add_state('square')
         fig.canvas.mpl_connect('key_press_event', on_press)
+        ax.set_title("Drag to select a region for analysis")
         plt.show()
 
         roi = tuple(map(round, rect_selector.extents))
