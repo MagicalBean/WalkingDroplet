@@ -79,7 +79,7 @@ def render(height_maps, drop_diameter, scale, render_mode):
         fig, ax = plt.subplots(subplot_kw={"projection": "3d"})
         r, c = height_maps[0].shape
         X, Y = np.meshgrid(np.arange(c), np.arange(r))
-        ax.set_zlim(-10, 10)
+        # ax.set_zlim(-10, 10)
         ax.view_init(elev=25, azim=45, roll=0)
 
         quality = 10 # 10 is default, 1 is highest
@@ -89,7 +89,7 @@ def render(height_maps, drop_diameter, scale, render_mode):
         def update(i):
             ax.clear()
             surf = ax.plot_surface(X, Y, height_maps[i], cmap=cm.ocean, rstride=quality, cstride=quality) # update data
-            ax.set_zlim(-10, 10)
+            # ax.set_zlim(-10, 10)
             return surf
             
     ani = animation.FuncAnimation(fig, update, frames=len(height_maps), interval=1, blit=False)

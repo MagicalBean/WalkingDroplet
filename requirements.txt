@@ -7,3 +7,5 @@ pyFFTW
 scipy
 scikit-image
 vidstab
+ffmpeg-python
+pyqt5

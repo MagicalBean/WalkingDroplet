@@ -31,7 +31,7 @@ acrylic_thickness = 6.35 # mm (h_c)
 # hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
 hstar = (1 - (1 / 1.4009)) * (fluid_depth + (1.4009 / 1.4906) * acrylic_thickness); # 5 mm depth, 0.25 is for air/water
 
-def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_length=-1, debug=False):
+def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_length=-1, debug=False, progress_cb=None, status_cb=None):
     """
     Wrapper for the fcd function that handles the image preperation.
 
@@ -48,6 +48,8 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_len
     """
     import glob
 
+    if status_cb: status_cb("Processing reference image...")
+    
     # Read reference image
     i_ref = imread(ref_img_path, as_gray=True)
 
@@ -69,9 +71,12 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_len
     if debug: print('done')
 
     height_maps = []
-    for file in files:
+    for i, file in enumerate(files):
         # Read deformed image
+        if status_cb: status_cb(f"Processing frame ({i+1}/{len(files)})...")
+        if progress_cb: progress_cb(int((i + 1) / len(files) * 100))
         if debug: print(f'processing {file} ... ', end='')
+
         i_def = imread(file, as_gray=True)
 
         i_def_stab = stabilizer.stabilize_frame(input_frame=i_def,
@@ -100,10 +105,13 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_len
 
     height_maps = np.stack(map_bins) 
 
+    if status_cb: status_cb("Creating animation...")
     if debug: print("creating animation...")
 
     # render the 2d color plot by default
-    return render(height_maps, drop_diameter, scale, render_mode)
+    return (height_maps, drop_diameter, scale)
+    # ani = render(height_maps, drop_diameter, scale, render_mode)
+    # return ani
 
 
 @cache.cache

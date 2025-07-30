@@ -39,6 +39,11 @@ def show_saved_roi(image, roi_path):
 
     return answer
 
+def get_first_image(i_def_path):
+    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
+    img_path = next((os.path.join(i_def_path, f) for f in os.listdir(i_def_path) if f.lower().endswith(image_extensions)), None)
+    return imread(img_path, as_gray=True)
+
 # previews deformed image and allows user to select a square region of it for analysis (if left blank it selects the whole image)
 
 # if user_override is False and preview is True, this works as normal
@@ -49,9 +54,7 @@ def select_region(i_def_path, user_override=False, preview=True):
     use_existing = roi_path.exists() and not user_override
 
     # select preview image
-    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff")
-    img_path = next((os.path.join(i_def_path, f) for f in os.listdir(i_def_path) if f.lower().endswith(image_extensions)), None)
-    img = imread(img_path, as_gray=True)
+    img = get_first_image(i_def_path)
 
     if use_existing and preview:
         use_existing = show_saved_roi(img, roi_path)
