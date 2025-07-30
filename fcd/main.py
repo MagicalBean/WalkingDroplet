@@ -46,6 +46,8 @@ if __name__ == "__main__":
     # run fcd
     ani = run_fcd(args.reference_image, args.definition_folder, crop_region, render_mode, debug=True)
 
+    image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff") 
+    img_path = next((os.path.join(args.definition_folder, f) for f in os.listdir(args.definition_folder) if f.lower().endswith(image_extensions)), None)
     ani_name = args.output_name if args.output_name is not None else Path(img_path).stem
     output_path = args.output_folder.joinpath(f'{ani_name}.mp4')
 
