@@ -190,8 +190,8 @@ class FCDWindow(QMainWindow):
         render_label = QLabel("Render Mode:")
         self.radio_group = QButtonGroup()
         render_buttons_layout = QHBoxLayout()
-        for mode in ["1d", "2d", "3d"]:
-            btn = QRadioButton(mode.upper())
+        for mode in ["1D (wave profile)", "2D (color map)", "3D (height map)"]:
+            btn = QRadioButton(mode)
             if mode == "2d":
                 btn.setChecked(True)
             btn.toggled.connect(lambda checked, m=mode: self.set_render_mode(int(m[0])))
@@ -206,7 +206,7 @@ class FCDWindow(QMainWindow):
         self.save_button.clicked.connect(self.save_output)
         self.save_button.setEnabled(False)
 
-        advanced_button = QPushButton("Advanced")
+        advanced_button = QPushButton("Advanced Settings")
         advanced_button.clicked.connect(self.open_advanced_dialog)
 
         # progress bar
