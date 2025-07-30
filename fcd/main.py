@@ -7,6 +7,17 @@ from fcd import run_fcd
 
 import matplotlib.pyplot as plt
 
+# constants
+scale = 1 / 0.055
+drop_diameter = 0.78
+fluid_depth = 5
+fluid_ior = 1.4009
+acrylic_thickness = 6.35
+acrylic_ior = 1.4906
+
+# hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
+hstar = (1 - (1 / fluid_ior)) * (fluid_depth + (fluid_ior / acrylic_ior) * acrylic_thickness)
+
 if __name__ == "__main__":
     import argparse
     
