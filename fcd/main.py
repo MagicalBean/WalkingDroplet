@@ -12,7 +12,7 @@ scale = 1 / 0.055
 drop_diameter = 0.78
 fluid_depth = 5
 fluid_ior = 1.4009
-acrylic_thickness = 6.35
+acrylic_thickness = 5.7
 acrylic_ior = 1.4906
 
 # hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)

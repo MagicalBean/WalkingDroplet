@@ -118,7 +118,7 @@ class FCDWindow(QMainWindow):
             "drop_diameter": 0.78,
             "fluid_depth": 5,
             "fluid_ior": 1.4009,
-            "acrylic_thickness": 6.35,
+            "acrylic_thickness": 5.7,
             "acrylic_ior": 1.4906,
         }
 
