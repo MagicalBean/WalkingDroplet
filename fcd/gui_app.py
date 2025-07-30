@@ -22,27 +22,105 @@ class FCDWorker(QThread):
     status = pyqtSignal(str)
     done = pyqtSignal(object) # emit animation object on finish
 
-    def __init__(self, ref_img, folder_path, crop, render_mode):
+    def __init__(self, ref_img, folder_path, crop, scale, drop_diameter, hstar, render_mode):
         super().__init__()
         self.ref_img = ref_img
         self.folder_path = folder_path
         self.crop = crop
+        self.scale = scale
+        self.drop_diameter = drop_diameter
+        self.hstar = hstar
         self.render_mode = render_mode
 
     def run(self):
-        obj = run_fcd(self.ref_img, self.folder_path, self.crop, self.render_mode, progress_cb=self.progress.emit, status_cb=self.status.emit)
+        obj = run_fcd(self.ref_img, self.folder_path, self.crop, self.scale, self.drop_diameter, self.hstar, self.render_mode, progress_cb=self.progress.emit, status_cb=self.status.emit)
         self.done.emit(obj)
+
+class AdvancedDialog(QDialog):
+    def __init__(self, settings=None):
+        super().__init__()
+        self.setWindowTitle("Advanced Settings")
+        self.setGeometry(300, 200,  300, 200)
+
+        self.settings = settings if settings else {}
+
+        layout = QGridLayout()
+        layout.setSpacing(10)
+
+        labels = []
+        self.inputs = []
+
+        labels.append(QLabel("Scale (px/mm): "))
+        self.inputs.append(QLineEdit(str(self.settings.get("scale"))))
+
+        labels.append(QLabel("Drop Diameter (mm): "))
+        self.inputs.append(QLineEdit(str(self.settings.get("drop_diameter"))))
+
+        labels.append(QLabel("Fluid Depth (mm): "))
+        self.inputs.append(QLineEdit(str(self.settings.get("fluid_depth"))))
+
+        labels.append(QLabel("Fluid Index of Refraction: "))
+        self.inputs.append(QLineEdit(str(self.settings.get("fluid_ior"))))
+
+        labels.append(QLabel("Container Thickness (mm): "))
+        self.inputs.append(QLineEdit(str(self.settings.get("acrylic_thickness"))))
+
+        labels.append(QLabel("Acrylic Index of Refraction: "))
+        self.inputs.append(QLineEdit(str(self.settings.get("acrylic_ior"))))
+
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(self.save_settings)
+        cancel_button = QPushButton("Cancel")
+        save_button.clicked.connect(self.cancel_settings)
+
+        for i in range(len(labels)):
+            layout.addWidget(labels[i], i, 0)
+            layout.addWidget(self.inputs[i], i, 2)
+
+        layout.addWidget(save_button, 6, 0)
+        layout.addWidget(cancel_button, 6, 2)
+
+        self.setLayout(layout)
+
+    def save_settings(self):
+        try:
+            self.settings["scale"] = float(eval(self.inputs[0].text()))
+            self.settings["drop_diameter"] = float(eval(self.inputs[1].text()))
+            self.settings["fluid_depth"] = float(eval(self.inputs[2].text()))
+            self.settings["fluid_ior"] = float(eval(self.inputs[3].text()))
+            self.settings["acrylic_thickness"] = float(eval(self.inputs[4].text()))
+            self.settings["acrylic_ior"] = float(eval(self.inputs[5].text()))
+            self.accept()
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Scale must be a number.")
+
+    def cancel_settings(self):
+        self.close()
+
+    def get_settings(self):
+        return self.settings
+
 
 class FCDWindow(QMainWindow):    
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Fast Checkerboard Demodulation")
-        self.setGeometry(200, 200, 600, 300)
+        self.setGeometry(200, 200, 600, 340)
         
         self.ref_image_path = ""
         self.def_folder_path = ""
         self.render_mode = 2 # default
         self.crop_region = None
+
+        # settings
+        self.advanced_settings = {
+            "scale": 1 / 0.055,
+            "drop_diameter": 0.78,
+            "fluid_depth": 5,
+            "fluid_ior": 1.4009,
+            "acrylic_thickness": 6.35,
+            "acrylic_ior": 1.4906,
+        }
 
         self.setStyleSheet("""
             QWidget {
@@ -60,6 +138,10 @@ class FCDWindow(QMainWindow):
             }
             QPushButton:hover {
                 background-color: #d6d6d6;
+            }
+            QPushButton:disabled {
+                background-color: #e8e8e8;
+                color: #c0c0c0;
             }
             QLabel {
                 padding: 2px;            
@@ -100,8 +182,9 @@ class FCDWindow(QMainWindow):
         crop_button = QPushButton("Select New ROI")
         crop_button.clicked.connect(self.select_crop_region)
         
-        load_crop_button = QPushButton("Load Previous ROI")
-        load_crop_button.clicked.connect(self.load_previous_crop)
+        self.load_crop_button = QPushButton("Load Previous ROI")
+        self.load_crop_button.clicked.connect(self.load_previous_crop)
+        self.load_crop_button.setEnabled(False)
         
         # render mode
         render_label = QLabel("Render Mode:")
@@ -119,8 +202,12 @@ class FCDWindow(QMainWindow):
         run_button = QPushButton("Run")
         run_button.clicked.connect(self.run_process)
 
-        save_button = QPushButton("Save")
-        save_button.clicked.connect(self.save_output)
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save_output)
+        self.save_button.setEnabled(False)
+
+        advanced_button = QPushButton("Advanced")
+        advanced_button.clicked.connect(self.open_advanced_dialog)
 
         # progress bar
         self.progress = QProgressBar()
@@ -140,14 +227,16 @@ class FCDWindow(QMainWindow):
         
         form_layout.addWidget(self.crop_label, 2, 0)
         form_layout.addWidget(crop_button, 2, 1)
-        form_layout.addWidget(load_crop_button, 2, 2)
+        form_layout.addWidget(self.load_crop_button, 2, 2)
 
         form_layout.addWidget(render_label, 3, 0)
         form_layout.addLayout(render_buttons_layout, 3, 1, 1, 2)
         
+        form_layout.addWidget(advanced_button, 4, 2)
+
         layout.addLayout(form_layout)
-        layout.addWidget(run_button)
-        layout.addWidget(save_button)
+        layout.addWidget(run_button) 
+        layout.addWidget(self.save_button)
         layout.addWidget(self.progress)
         layout.addWidget(self.status_label)
 
@@ -165,9 +254,18 @@ class FCDWindow(QMainWindow):
         if folder_path:
             self.def_folder_path = folder_path
             self.def_label.setText(f"Definition Folder: {os.path.basename(folder_path)}")
+            roi_path = roi_filename_for(Path(self.def_folder_path))
+            if roi_path and os.path.exists(roi_path):
+                self.load_crop_button.setEnabled(True)
 
     def set_render_mode(self, mode):
         self.render_mode = mode
+
+    def open_advanced_dialog(self):
+        dialog = AdvancedDialog(self.advanced_settings.copy())
+        if dialog.exec_() == QDialog.Accepted:
+            self.advanced_settings = dialog.get_settings()
+
         
     def select_crop_region(self):
         if not self.def_folder_path:
@@ -223,10 +321,16 @@ class FCDWindow(QMainWindow):
             QMessageBox.warning(self, "Missing Info", "Please select a reference image and a definition folder.")
             return
         
+        # hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
+        hstar = (1 - (1 / self.advanced_settings['fluid_ior'])) * (self.advanced_settings['fluid_depth'] + (self.advanced_settings['fluid_ior'] / self.advanced_settings['acrylic_ior']) * self.advanced_settings['acrylic_thickness'])
+
         self.worker = FCDWorker(
             self.ref_image_path,
             self.def_folder_path,
             self.crop_region,
+            self.advanced_settings.get('scale'),
+            self.advanced_settings.get('drop_diameter'),
+            hstar,
             self.render_mode
         )
 
@@ -238,6 +342,7 @@ class FCDWindow(QMainWindow):
     def on_processing_done(self, obj):
         self.status_label.setText("Idle")
         self.progress.setValue(0)
+        self.save_button.setEnabled(True)
 
         if obj:
             height_maps, drop_diameter, scale = obj

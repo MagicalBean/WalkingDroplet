@@ -22,16 +22,7 @@ cache = Memory(location=Path("cache"), verbose=0)  # no console spam
 # initialize video stabilizer
 stabilizer = VidStab()
 
-# constants
-scale = 1 / 0.055; # pix/mm, lengthscale
-drop_diameter = 0.78
-
-fluid_depth = 5 # mm (h_l)
-acrylic_thickness = 6.35 # mm (h_c)
-# hstar formula: (1 - n_a/ n_l) * (h_l + (n_l / n_c)* h_c)
-hstar = (1 - (1 / 1.4009)) * (fluid_depth + (1.4009 / 1.4906) * acrylic_thickness); # 5 mm depth, 0.25 is for air/water
-
-def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_length=-1, debug=False, progress_cb=None, status_cb=None):
+def run_fcd(ref_img_path, def_folder_path, crop_region, scale, drop_diameter, hstar, render_mode=2, input_length=-1, debug=False, progress_cb=None, status_cb=None):
     """
     Wrapper for the fcd function that handles the image preperation.
 
@@ -89,7 +80,7 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_len
             i_def_stab = i_def_stab[y1:y2, x1:x2]
 
         t0 = time.time()
-        height_field = fcd(i_def_stab, carriers) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
+        height_field = fcd(i_def_stab, carriers, hstar) / (scale**2) # divide by scale^2 (pixel to mm conversion?)
         # height_field_sub = subplane(height_field) # removed to match surferbot example
         height_field_filtered = filt_band_pass(height_field, [25, 200], 0)
 
@@ -115,7 +106,7 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, render_mode=2, input_len
 
 
 @cache.cache
-def fcd(i_def, carriers: List[Carrier]):
+def fcd(i_def, carriers: List[Carrier], hstar):
     i_def_fft = fft2(i_def)
 
     phis = [-np.angle(ifft2(i_def_fft * c.mask) * c.ccsgn) for c in carriers]
