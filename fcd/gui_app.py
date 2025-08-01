@@ -22,18 +22,18 @@ class FCDWorker(QThread):
     status = pyqtSignal(str)
     done = pyqtSignal(object) # emit animation object on finish
 
-    def __init__(self, ref_img, folder_path, crop, scale, drop_diameter, hstar, render_mode):
+    def __init__(self, ref_img, folder_path, crop, scale, drop_diameter, hstar, bins):
         super().__init__()
         self.ref_img = ref_img
         self.folder_path = folder_path
         self.crop = crop
         self.scale = scale
         self.drop_diameter = drop_diameter
-        self.hstar = hstar
-        self.render_mode = render_mode
+        self.hstar = hstar 
+        self.bins=bins
 
     def run(self):
-        obj = run_fcd(self.ref_img, self.folder_path, self.crop, self.scale, self.drop_diameter, self.hstar, self.render_mode, progress_cb=self.progress.emit, status_cb=self.status.emit)
+        obj = run_fcd(self.ref_img, self.folder_path, self.crop, self.scale, self.hstar, self.bins, progress_cb=self.progress.emit, status_cb=self.status.emit)
         self.done.emit(obj)
 
 class AdvancedDialog(QDialog):
@@ -68,34 +68,47 @@ class AdvancedDialog(QDialog):
         labels.append(QLabel("Acrylic Index of Refraction: "))
         self.inputs.append(QLineEdit(str(self.settings.get("acrylic_ior"))))
 
+        bins_label = QLabel("# of Averaging Bins: ")
+        self.bins_input = QLineEdit(str(self.settings.get("bins")))
+        max_bins_button = QPushButton("Max")
+        max_bins_button.clicked.connect(self.max_bins)
+
         save_button = QPushButton("Save")
+        save_button.setDefault(True)
         save_button.clicked.connect(self.save_settings)
         cancel_button = QPushButton("Cancel")
-        save_button.clicked.connect(self.cancel_settings)
+        cancel_button.clicked.connect(self.cancel_settings)
 
         for i in range(len(labels)):
             layout.addWidget(labels[i], i, 0)
-            layout.addWidget(self.inputs[i], i, 2)
+            layout.addWidget(self.inputs[i], i, 1, 1, 2)
 
-        layout.addWidget(save_button, 6, 0)
-        layout.addWidget(cancel_button, 6, 2)
+        layout.addWidget(bins_label, 6, 0)
+        layout.addWidget(self.bins_input, 6, 1)
+        layout.addWidget(max_bins_button, 6, 2)
+        layout.addWidget(save_button, 7, 0)
+        layout.addWidget(cancel_button, 7, 2)
 
         self.setLayout(layout)
 
+    def max_bins(self):
+        self.bins_input.setText(str(self.settings['max_bins']))
+
     def save_settings(self):
         try:
-            self.settings["scale"] = float(eval(self.inputs[0].text()))
-            self.settings["drop_diameter"] = float(eval(self.inputs[1].text()))
-            self.settings["fluid_depth"] = float(eval(self.inputs[2].text()))
-            self.settings["fluid_ior"] = float(eval(self.inputs[3].text()))
-            self.settings["acrylic_thickness"] = float(eval(self.inputs[4].text()))
-            self.settings["acrylic_ior"] = float(eval(self.inputs[5].text()))
+            self.settings['scale'] = float(eval(self.inputs[0].text()))
+            self.settings['drop_diameter'] = float(eval(self.inputs[1].text()))
+            self.settings['fluid_depth'] = float(eval(self.inputs[2].text()))
+            self.settings['fluid_ior'] = float(eval(self.inputs[3].text()))
+            self.settings['acrylic_thickness'] = float(eval(self.inputs[4].text()))
+            self.settings['acrylic_ior'] = float(eval(self.inputs[5].text()))
+            self.settings['bins'] = int(eval(self.bins_input.text()))
             self.accept()
         except ValueError:
-            QMessageBox.warning(self, "Invalid Input", "Scale must be a number.")
+            QMessageBox.warning(self, "Invalid Input", "Invalid Input")
 
     def cancel_settings(self):
-        self.close()
+        self.reject()
 
     def get_settings(self):
         return self.settings
@@ -114,12 +127,14 @@ class FCDWindow(QMainWindow):
 
         # settings
         self.advanced_settings = {
-            "scale": 1 / 0.055,
+            "scale": 1 / 0.056,
             "drop_diameter": 0.78,
             "fluid_depth": 5,
             "fluid_ior": 1.4009,
             "acrylic_thickness": 5.7,
             "acrylic_ior": 1.4906,
+            'bins': 16,
+            'max_bins': 16
         }
 
         self.setStyleSheet("""
@@ -254,6 +269,7 @@ class FCDWindow(QMainWindow):
         if folder_path:
             self.def_folder_path = folder_path
             self.def_label.setText(f"Definition Folder: {os.path.basename(folder_path)}")
+            self.advanced_settings['max_bins'] = len([f for f in os.listdir(folder_path) if f.lower().endswith(('.png', '.jpg', '.jpeg', '.tiff', '.tif'))])
             roi_path = roi_filename_for(Path(self.def_folder_path))
             if roi_path and os.path.exists(roi_path):
                 self.load_crop_button.setEnabled(True)
@@ -331,7 +347,7 @@ class FCDWindow(QMainWindow):
             self.advanced_settings.get('scale'),
             self.advanced_settings.get('drop_diameter'),
             hstar,
-            self.render_mode
+            self.advanced_settings.get('bins')
         )
 
         self.worker.progress.connect(self.progress.setValue)
@@ -344,9 +360,9 @@ class FCDWindow(QMainWindow):
         self.progress.setValue(0)
         self.save_button.setEnabled(True)
 
-        if obj:
-            height_maps, drop_diameter, scale = obj
-            self.anim = render(height_maps, drop_diameter, scale, self.render_mode) # keep internal reference
+        if obj is not None:
+            height_maps = obj
+            self.anim = render(height_maps, self.advanced_settings.get('drop_diameter'), self.advanced_settings.get('scale'), self.render_mode) # keep internal reference
             plt.show(block=False)
         
         

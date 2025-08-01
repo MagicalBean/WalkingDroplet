@@ -22,7 +22,7 @@ cache = Memory(location=Path("cache"), verbose=0)  # no console spam
 # initialize video stabilizer
 stabilizer = VidStab()
 
-def run_fcd(ref_img_path, def_folder_path, crop_region, scale, drop_diameter, hstar, render_mode=2, input_length=-1, debug=False, progress_cb=None, status_cb=None):
+def run_fcd(ref_img_path, def_folder_path, crop_region, scale, hstar, bins=None, input_length=-1, debug=False, progress_cb=None, status_cb=None):
     """
     Wrapper for the fcd function that handles the image preperation.
 
@@ -30,9 +30,13 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, scale, drop_diameter, hs
         ref_img_path (str): Path to the reference image.
         def_folder_path (int): Path to the folder containing the definition images.
         crop_region (tuple): Crop region coords in (x1, x2, y1, y2) format
-        render_mode (int): Render mode 1, 2, or 3
+        scale (float): mm/px scaling value
+        hstar (float): Refraction compensation scalar
+        bins (int): framerate frequency / drive frequency
         input_length (int): The number of definition images to use (default is all files)
         debug (bool): Whether or not to print to the console (default False)
+        progress_cb (func): Callback function for updating GUI progress bar
+        status_cb (func): Callback function for updating GUI status label
 
     Returns:
         animation: The rendered matplotlib animation.
@@ -90,9 +94,8 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, scale, drop_diameter, hs
 
     if debug: print(f'height map processing done\n')
 
-    n = 8 # frame rate frequency / drive frequency
+    n = bins if bins is not None else len(height_maps) # frame rate frequency / drive frequency
     map_bins = [np.mean(height_maps[i::n], axis=0) for i in range(n)]
-    # data = np.mean(height_maps, axis=0)[center_y, :]
 
     height_maps = np.stack(map_bins) 
 
@@ -100,9 +103,7 @@ def run_fcd(ref_img_path, def_folder_path, crop_region, scale, drop_diameter, hs
     if debug: print("creating animation...")
 
     # render the 2d color plot by default
-    return (height_maps, drop_diameter, scale)
-    # ani = render(height_maps, drop_diameter, scale, render_mode)
-    # return ani
+    return height_maps
 
 
 @cache.cache

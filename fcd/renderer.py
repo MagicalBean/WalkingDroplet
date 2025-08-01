@@ -43,9 +43,11 @@ def render(height_maps, drop_diameter, scale, render_mode):
         bot, top = ax.get_ylim()
         ax.add_patch(Rectangle((center_x - ((drop_diameter / 2) * scale) - .5, bot - .5), drop_diameter * scale, top - bot, facecolor="grey", alpha=0.5))
 
-        data = height_maps[0][int(center_y), :]
-        plt.ylim(min(data)*2.0, max(data)*2.0)
-        line, = plt.plot(data)
+        global_max = np.max(height_maps[:, int(center_y), :])
+        global_min = np.min(height_maps[:, int(center_y), :])
+
+        plt.ylim(global_min * 1.1, global_max * 1.1)
+        line, = plt.plot(height_maps[0][int(center_y), :])
         plt.xlabel("Distance (mm)")
         plt.ylabel("Amplitude")
 

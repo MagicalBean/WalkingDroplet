@@ -4,6 +4,7 @@ from pathlib import Path
 
 from select_roi import select_region
 from fcd import run_fcd
+from renderer import render
 
 import matplotlib.pyplot as plt
 
@@ -44,14 +45,17 @@ if __name__ == "__main__":
     render_mode = 1 if args.one_d else 3 if args.three_d else 2
 
     # run fcd
-    ani = run_fcd(args.reference_image, args.definition_folder, crop_region, render_mode, debug=True)
+    bins=16
+    height_maps = run_fcd(args.reference_image, args.definition_folder, crop_region, scale, drop_diameter, hstar, bins, render_mode, debug=True)
+
+    anim = render(height_maps, drop_diameter, scale, render_mode)
 
     image_extensions = (".png", ".jpg", ".jpeg", ".tif", ".tiff") 
     img_path = next((os.path.join(args.definition_folder, f) for f in os.listdir(args.definition_folder) if f.lower().endswith(image_extensions)), None)
     ani_name = args.output_name if args.output_name is not None else Path(img_path).stem
     output_path = args.output_folder.joinpath(f'{ani_name}.mp4')
 
-    ani.save(output_path, writer='ffmpeg', fps=10)
+    anim.save(output_path, writer='ffmpeg', fps=10)
     print(f'Total runtime {time.time() - start_time:.2f}s\n')
     
     plt.show()

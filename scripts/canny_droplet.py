@@ -92,7 +92,7 @@ def main(argv):
         # filter out contours that are too big, small, or touch the border
         height, width = gray.shape
         image_area = height * width
-        min_area = 0.005 * image_area
+        min_area = 0.0001 * image_area
         max_area = 0.2 * image_area
 
         def touches_border(cnt, margin=2):
@@ -114,6 +114,7 @@ def main(argv):
 
         for i, cnt in enumerate(contours):
             cv.drawContours(contour_image, contours, i, (255, 255, 255), 2) # 2 is the thickness
+            cv.putText(contour_image, str(cv.contourArea(cnt) / image_area), cv.boundingRect(cnt)[:2], font, 1, (255, 255, 255), 2, cv.LINE_AA)
 
         for i, cnt in enumerate(filtered_contours):
             # Generate a random BGR color
@@ -171,8 +172,14 @@ def main(argv):
         result_img = gray.copy()
         cv.ellipse(result_img, best_ellipse, (0, 255, 0), 3)
         
+        edges = cv.cvtColor(edges, cv.COLOR_GRAY2BGR)
         grey_3_channel = cv.cvtColor(result_img, cv.COLOR_GRAY2BGR)
-        a = cv.resize(contour_image, (0, 0), None, .5, .5)
+
+        for i, cnt in enumerate(filtered_contours):
+            color = (random.randint(0, 255), random.randint(0, 255), random.randint(0, 255))
+            cv.drawContours(grey_3_channel, filtered_contours, i, color, 2) # 2 is the thickness
+
+        a = cv.resize(edges, (0, 0), None, .5, .5)
         b = cv.resize(grey_3_channel, (0, 0), None, .5, .5)
 
         numpy_horizontal = np.hstack((a, b))
@@ -187,7 +194,7 @@ def main(argv):
     print()
 
 # mm to pixel scaling value
-scale = 6 / 895.09 # mm/pix
+scale = 6 / 949.06 # mm/pix
 
 if __name__ == "__main__":
     main([sys.argv[1]])
